@@ -36,7 +36,6 @@ def RegistrationFunctionality(self, request, *args, **kwargs):
             'refresh': str(refresh),
             'access': str(refresh.access_token)
         })
-        print("errpr")
     except Exception as error:
         print(error)
         raise NotFound(detail="User Already exists")

@@ -1,7 +1,9 @@
+from kivy.uix.gridlayout import product
 from django.db import models
 from django.db.models.signals import pre_save, post_delete
 from django.dispatch import receiver
 from django.contrib.auth.models import User
+from django.db.models import Count
 
 ##########------USER MODELS--------##########
 class CustomUser(models.Model):
@@ -58,6 +60,22 @@ class Product(models.Model):
 
     def __str__(self):
         return self.product_name
+    
+    def calculate_average_rating(self):
+        reviews = Review.objects.filter(product=self)
+        total_rating = sum([review.rating for review in reviews])
+        total_reviews = reviews.count()
+        if total_reviews > 0:
+            average_rating = total_rating / total_reviews
+            self.rating = round(average_rating, 1)  
+        else:
+            self.rating = 5  
+        self.save()
+    
+    def calculate_favorites(self):
+        total_like = Favorites.objects.filter(product=self).aggregate(total=Count('id'))['total']
+        self.like = total_like if total_like else 0 
+        self.save()
 
 
 from django.db import models
@@ -121,6 +139,12 @@ class Review(models.Model):
     def __str__(self):
         return f"Review for {self.product.product_name}"
 
+@receiver(post_save, sender=Review)
+def update_product_rating_on_review_save(sender, instance, created, **kwargs):
+    # Update the product rating when a review is saved (added or updated)
+    if instance.product:
+        instance.product.calculate_average_rating()
+
 class Vouchers(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     discount_type = models.CharField(max_length=10,choices=[('percentage', 'Percentage'),('flat', 'Flat')]) 
@@ -132,8 +156,6 @@ class Vouchers(models.Model):
     terms_and_conditions = models.TextField(blank=True, null=True) 
     is_used = models.BooleanField(default=False)
  
-
-
     def __str__(self):
         return f"Voucher {self.voucher_code} for {self.user.username}"
 
@@ -167,8 +189,6 @@ class ShippingAddress(models.Model):
 
 
 from django.db import models
-
-
 
 class Order(models.Model):
     user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
@@ -211,7 +231,6 @@ class ShippingUpdate(models.Model):
         return f"Update for Order {self.order.order_id} - {self.status} at {self.timestamp}"
 
 
-
 class OrderItems(models.Model):
     product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, blank=True)
     order = models.ForeignKey(Order, on_delete=models.SET_NULL, null=True, blank=True)
@@ -230,5 +249,8 @@ class Favorites(models.Model):
         return f"Favorite - {self.product.product_name}"
 
 
-
+@receiver(post_save, sender=Favorites)
+def update_product_rating_on_review_save(sender, instance, created, **kwargs):
+    if instance.product:
+        instance.product.calculate_favorites()
 
